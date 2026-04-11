@@ -38,7 +38,7 @@ func buildTip() (string, error) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	root := filepath.Dir(filepath.Dir(thisFile))
 
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/tip/")
+	cmd := exec.Command("go", "build", "-tags", "e2e", "-o", bin, "./cmd/tip/")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {

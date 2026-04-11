@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -128,13 +130,24 @@ func cmdObserve() {
 		return
 	}
 
-	// Parse command
-	parts := strings.Fields(cmdLine)
+	// Parse command (shell-aware tokenizer)
+	parts := shellSplit(cmdLine)
 	if len(parts) == 0 {
 		return
 	}
 	cmd := parts[0]
 	args := parts[1:]
+
+	// Apply per-tool overrides
+	overrides := loadToolOverrides()
+	if tc, ok := overrides[cmd]; ok {
+		if !tc.Enabled {
+			return
+		}
+		if tc.Mode != "" {
+			mode = tc.Mode
+		}
+	}
 
 	// Record to session DB
 	recordSession(cmd, args, exitCode)
@@ -171,18 +184,27 @@ func cmdObserve() {
 }
 
 func cmdOn() {
-	if len(os.Args) >= 3 {
-		tool := os.Args[2]
-		mode := "guided"
-		for i := 3; i < len(os.Args); i++ {
-			if os.Args[i] == "--mode" && i+1 < len(os.Args) {
-				i++
-				mode = os.Args[i]
-			}
+	var tool string
+	mode := ""
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--mode" && i+1 < len(os.Args) {
+			i++
+			mode = os.Args[i]
+		} else if !strings.HasPrefix(os.Args[i], "-") && tool == "" {
+			tool = os.Args[i]
+		}
+	}
+	if tool != "" {
+		if mode == "" {
+			mode = "guided"
 		}
 		saveToolConfig(tool, true, mode)
 		fmt.Printf("tip enabled for %s (mode: %s)\n", tool, mode)
 		return
+	}
+	// Global enable
+	if mode != "" {
+		_ = os.WriteFile(tipModeFile(), []byte(mode), 0644)
 	}
 	_ = os.WriteFile(tipStateFile(), []byte("on"), 0644)
 	fmt.Println("tip enabled")
@@ -242,7 +264,19 @@ func cmdAdapter() {
 			fmt.Fprintln(os.Stderr, "usage: tip adapter info <name>")
 			os.Exit(1)
 		}
-		fmt.Printf("adapter: %s\n", os.Args[3])
+		adapterBin := discoverAdapter(os.Args[3])
+		if adapterBin == "" {
+			fmt.Fprintf(os.Stderr,
+				"adapter not found: %s\n", os.Args[3])
+			os.Exit(1)
+		}
+		out, err := exec.Command(adapterBin, "describe").Output()
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"adapter describe failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(string(out))
 	case "new":
 		if len(os.Args) < 4 {
 			fmt.Fprintln(os.Stderr, "usage: tip adapter new <name>")
@@ -423,19 +457,39 @@ func loadHistory() []map[string]any {
 	return hist
 }
 
+func defaultAdapterDir() string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".local", "share", "tip", "adapters")
+}
+
 func discoverAdapter(cmd string) string {
 	name := "tip-" + cmd
+
+	check := func(dir string) string {
+		p := filepath.Join(dir, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return p
+		}
+		return ""
+	}
+
 	if adapterPath := os.Getenv("TIP_ADAPTER_PATH"); adapterPath != "" {
 		for _, dir := range filepath.SplitList(adapterPath) {
-			p := filepath.Join(dir, name)
-			if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			if p := check(dir); p != "" {
 				return p
 			}
 		}
 	}
+	if defDir := defaultAdapterDir(); defDir != "" {
+		if p := check(defDir); p != "" {
+			return p
+		}
+	}
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		p := filepath.Join(dir, name)
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+		if p := check(dir); p != "" {
 			return p
 		}
 	}
@@ -467,6 +521,9 @@ func discoverAllAdapters() []string {
 			scan(dir)
 		}
 	}
+	if defDir := defaultAdapterDir(); defDir != "" {
+		scan(defDir)
+	}
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
 		scan(dir)
 	}
@@ -478,11 +535,15 @@ func callAdapter(
 ) map[string]any {
 	input, _ := json.Marshal(envelope)
 
-	cmd := exec.Command(bin, "suggest")
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, bin, "suggest")
 	cmd.Stdin = strings.NewReader(string(input))
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		return nil // timeout or crash → silent skip
 	}
 
 	var resp map[string]any
@@ -490,6 +551,37 @@ func callAdapter(
 		return nil
 	}
 	return resp
+}
+
+// shellSplit splits a command line respecting single and double
+// quotes. Not a full POSIX parser — covers the common cases.
+func shellSplit(line string) []string {
+	var parts []string
+	var cur strings.Builder
+	var quote rune // 0 = unquoted
+	for _, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ' ' || r == '\t':
+			if cur.Len() > 0 {
+				parts = append(parts, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	if cur.Len() > 0 {
+		parts = append(parts, cur.String())
+	}
+	return parts
 }
 
 func renderResponse(resp map[string]any, exitCode string) {

@@ -22,10 +22,13 @@ func TestSessionBuildsHistory(t *testing.T) {
 		"git push",
 	}
 	for _, c := range cmds {
-		runTip(t,
+		_, _, code := runTip(t,
 			[]string{"observe", "--cmd-line", c, "--exit", "0"},
 			env,
 		)
+		if code != 0 {
+			t.Fatalf("observe %q exit code: %d", c, code)
+		}
 	}
 
 	// Verify session file exists with entries
@@ -72,15 +75,21 @@ func TestSessionScopedToCwd(t *testing.T) {
 	}
 
 	// Observe in dir1
-	runTipInDir(t, dir1,
+	_, _, code1 := runTipInDir(t, dir1,
 		[]string{"observe", "--cmd-line", "ls -la", "--exit", "0"},
 		env,
 	)
+	if code1 != 0 {
+		t.Fatalf("dir1 observe exit code: %d", code1)
+	}
 	// Observe in dir2
-	runTipInDir(t, dir2,
+	_, _, code2 := runTipInDir(t, dir2,
 		[]string{"observe", "--cmd-line", "pwd", "--exit", "0"},
 		env,
 	)
+	if code2 != 0 {
+		t.Fatalf("dir2 observe exit code: %d", code2)
+	}
 
 	// Count session files — should be 2 different ones
 	files, err := os.ReadDir(stateDir)

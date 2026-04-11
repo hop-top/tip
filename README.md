@@ -43,16 +43,17 @@ tip shows a dimmed suggestion below your output:
 | transparent | Record session, skip rendering |
 | quiet | Skip entirely |
 
-Set mode globally:
+Set global mode:
 
 ```sh
 tip on --mode transparent
 ```
 
-Per-tool override:
+Per-tool override (tool name before or after flag):
 
 ```sh
 tip on git --mode guided
+tip on --mode guided git
 tip off docker
 ```
 
@@ -74,8 +75,9 @@ tip version                 # version info
 
 ## Adapters
 
-tip discovers external `tip-<tool>` binaries in `$PATH` and
-`~/.local/share/tip/adapters/`.
+tip discovers external `tip-<tool>` binaries in
+`$TIP_ADAPTER_PATH` (if set), `~/.local/share/tip/adapters/`,
+and `$PATH`.
 
 ### Install an adapter
 

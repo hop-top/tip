@@ -6,9 +6,10 @@ with two required subcommands.
 
 ## Discovery Order
 
-1. `$PATH` lookup for `tip-<tool>`
-2. Plugin dir: `~/.local/share/tip/adapters/tip-<tool>`
-3. Fallback: built-in Level 0 generic adapter
+1. `$TIP_ADAPTER_PATH` directories (if set)
+2. Default plugin dir: `~/.local/share/tip/adapters/`
+3. `$PATH` lookup for `tip-<tool>`
+4. Fallback: built-in Level 0 generic adapter
 
 ## Subcommands
 

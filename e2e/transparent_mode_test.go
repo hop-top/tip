@@ -61,11 +61,14 @@ func TestTransparentModeRecordsSession(t *testing.T) {
 		"TIP_ADAPTER_PATH": t.TempDir(),
 	}
 
-	runTip(t,
+	_, _, code := runTip(t,
 		[]string{"observe", "--cmd-line", "git status",
 			"--exit", "0"},
 		env,
 	)
+	if code != 0 {
+		t.Fatalf("exit code: %d", code)
+	}
 
 	// Verify session file was written
 	files, err := os.ReadDir(stateDir)

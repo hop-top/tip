@@ -49,6 +49,24 @@ func buildTip() (string, error) {
 
 // runTip executes the tip binary with args and env overrides.
 // Returns stdout, stderr, exit code.
+// dedupEnv returns os.Environ() with keys in overrides removed,
+// then appends the overrides.
+func dedupEnv(overrides map[string]string) []string {
+	base := os.Environ()
+	out := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		k, _, _ := strings.Cut(entry, "=")
+		if _, dup := overrides[k]; dup {
+			continue
+		}
+		out = append(out, entry)
+	}
+	for k, v := range overrides {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
 func runTip(
 	t *testing.T,
 	args []string,
@@ -56,10 +74,7 @@ func runTip(
 ) (string, string, int) {
 	t.Helper()
 	cmd := exec.Command(tipBin, args...)
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = dedupEnv(env)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -85,10 +100,7 @@ func runTipInDir(
 	t.Helper()
 	cmd := exec.Command(tipBin, args...)
 	cmd.Dir = dir
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = dedupEnv(env)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -164,6 +176,9 @@ func main() {
 	}
 
 	bin := filepath.Join(dir, "tip-"+name)
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", bin, srcFile)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {

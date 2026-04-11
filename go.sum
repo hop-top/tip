@@ -80,8 +80,8 @@ gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 h1:YR8cESwS4TdDjEe65xsg0ogR
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-hop.top/kit v0.1.1-alpha.3 h1:wUI+MwcD6vu1d/Q5li2QYH+Gk4VKnpEG/Uk5EdByik8=
-hop.top/kit v0.1.1-alpha.3/go.mod h1:bXizcOLhuGuy6fBGvWjJmTxIOn5Vr32Y8S+TBhgqy5M=
+hop.top/kit v0.1.1-alpha.4 h1:ytrhGnMKbxmt2DJIUVQFkvdIulAA0/CfBWjKKC2+B4k=
+hop.top/kit v0.1.1-alpha.4/go.mod h1:bXizcOLhuGuy6fBGvWjJmTxIOn5Vr32Y8S+TBhgqy5M=
 modernc.org/cc/v4 v4.27.1 h1:9W30zRlYrefrDV2JE2O8VDtJ1yPGownxciz5rrbQZis=
 modernc.org/cc/v4 v4.27.1/go.mod h1:uVtb5OGqUKpoLWhqwNQo/8LwvoiEBLvZXIQ/SmO6mL0=
 modernc.org/ccgo/v4 v4.32.0 h1:hjG66bI/kqIPX1b2yT6fr/jt+QedtP2fqojG2VrFuVw=

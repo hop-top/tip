@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"bufio"
 	"context"
 	"os/exec"
 	"strings"
@@ -234,157 +233,18 @@ func parseHelp(cmd string) []string {
 }
 
 // ParseHelpOutput extracts subcommand names from --help output text.
-// Deprecated: use kit/toolspec/sources/help.ParseHelpOutput instead.
+// Delegates to kit/toolspec/sources/help for the actual parsing.
 // Kept exported for backward compatibility.
 func ParseHelpOutput(text string) []string {
-	var (
-		subs    []string
-		seen    = map[string]bool{}
-		inBlock bool
-	)
-
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-		lower := strings.ToLower(trimmed)
-
-		if isSectionHeader(trimmed, lower) {
-			inBlock = true
-			continue
-		}
-
-		if inBlock {
-			if trimmed == "" {
-				inBlock = false
-				continue
-			}
-
-			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
-				if isSectionHeader(trimmed, lower) {
-					continue
-				}
-				inBlock = false
-				continue
-			}
-
-			name := extractSubcommand(trimmed)
-			if name != "" && !seen[name] {
-				seen[name] = true
-				subs = append(subs, name)
-			}
-		}
-	}
-	if scanner.Err() != nil {
+	spec := helpSource.ParseHelpOutput("", text)
+	if spec == nil {
 		return nil
 	}
-
-	return subs
-}
-
-// isSectionHeader checks if a line is a header that precedes
-// a subcommand listing.
-func isSectionHeader(trimmed, lower string) bool {
-	if strings.HasSuffix(lower, "commands:") ||
-		strings.HasSuffix(lower, "subcommands:") {
-		return true
+	names := make([]string, len(spec.Commands))
+	for i, c := range spec.Commands {
+		names[i] = c.Name
 	}
-
-	if isAllCaps(trimmed) && len(trimmed) > 2 {
-		if isNonCommandSection(lower) {
-			return false
-		}
-		return true
-	}
-
-	if strings.Contains(lower, "(see also:") ||
-		strings.Contains(lower, "these are common") {
-		return true
-	}
-
-	if isGitCategory(trimmed, lower) {
-		return true
-	}
-
-	return false
-}
-
-// isAllCaps checks if a string is all uppercase letters, spaces,
-// ampersands, and punctuation (no lowercase).
-func isAllCaps(s string) bool {
-	hasLetter := false
-	for _, r := range s {
-		if r >= 'a' && r <= 'z' {
-			return false
-		}
-		if r >= 'A' && r <= 'Z' {
-			hasLetter = true
-		}
-	}
-	return hasLetter
-}
-
-var skipSections = map[string]bool{
-	"flags": true, "global flags": true, "global options": true,
-	"options": true, "usage": true, "examples": true,
-	"help topics": true, "learn more": true, "resources": true,
-	"description": true, "synopsis": true, "environment": true,
-	"see also": true, "diagnostics": true,
-}
-
-func isNonCommandSection(lower string) bool {
-	return skipSections[lower]
-}
-
-func isGitCategory(trimmed, lower string) bool {
-	if trimmed == "" || trimmed != lower {
-		return false
-	}
-	if strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "'") {
-		return false
-	}
-	if !strings.Contains(lower, ",") && !strings.Contains(lower, " and ") {
-		return false
-	}
-	return true
-}
-
-func extractSubcommand(line string) string {
-	parts := strings.Fields(line)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	name := parts[0]
-
-	if strings.HasPrefix(name, "-") {
-		return ""
-	}
-
-	if len(parts) > 1 && (name == "wrangler" || name == "gh" ||
-		name == "docker" || name == "git") {
-		name = parts[1]
-	}
-
-	name = strings.TrimSuffix(name, ":")
-
-	if strings.HasPrefix(name, "[") || strings.HasPrefix(name, "<") {
-		return ""
-	}
-
-	if len(name) > 0 && name[0] > 127 {
-		return ""
-	}
-
-	if strings.Contains(name, "*") {
-		name = strings.TrimSuffix(name, "*")
-	}
-
-	if name == "" {
-		return ""
-	}
-
-	return name
+	return names
 }
 
 func min(a, b int) int {

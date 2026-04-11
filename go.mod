@@ -1,16 +1,17 @@
 module hop.top/tip
 
-go 1.26
+go 1.26.1
 
 require (
+	charm.land/lipgloss/v2 v2.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
+	gopkg.in/yaml.v3 v3.0.1
 	hop.top/kit v0.1.1-alpha.3
 )
 
 require (
 	charm.land/fang/v2 v2.0.1 // indirect
-	charm.land/lipgloss/v2 v2.0.2 // indirect
 	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
@@ -51,7 +52,6 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

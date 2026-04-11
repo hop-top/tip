@@ -28,12 +28,11 @@ __tip_preexec() {
 __tip_precmd() {
   local exit_code=$?
   [[ -z "$__tip_cmd" ]] && return
-  [[ "$__tip_enabled" == "0" ]] && return
+  tip enabled &>/dev/null || { unset __tip_cmd; return; }
   tip observe --cmd-line "$__tip_cmd" --exit "$exit_code" 2>/dev/null
   unset __tip_cmd
 }
 
-__tip_enabled=1
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec __tip_preexec
 add-zsh-hook precmd __tip_precmd
@@ -48,12 +47,11 @@ __tip_preexec() {
 __tip_precmd() {
   local exit_code=$?
   [[ -z "$__tip_cmd" ]] && return
-  [[ "$__tip_enabled" == "0" ]] && return
+  tip enabled &>/dev/null || { unset __tip_cmd; return; }
   tip observe --cmd-line "$__tip_cmd" --exit "$exit_code" 2>/dev/null
   unset __tip_cmd
 }
 
-__tip_enabled=1
 trap '__tip_preexec' DEBUG
 PROMPT_COMMAND="__tip_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 `

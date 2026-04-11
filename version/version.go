@@ -2,10 +2,8 @@
 package version
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 	"hop.top/kit/upgrade"
@@ -49,9 +47,9 @@ func UpgradeCmd(name, currentVersion string) *cobra.Command {
 				upgrade.WithGitHub("ideacrafterslabs/tip"),
 			)
 			return upgrade.RunCLI(
-				context.Background(),
+				cmd.Context(),
 				checker,
-				upgrade.CLIOptions{Out: os.Stderr},
+				upgrade.CLIOptions{Out: cmd.ErrOrStderr()},
 			)
 		},
 	}

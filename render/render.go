@@ -45,6 +45,18 @@ func Format(r Result, opts Options) string {
 
 	noColor := opts.NoColor || os.Getenv("NO_COLOR") != ""
 
+	// Promote first suggestion to primary if none marked
+	hasPrimary := false
+	for _, s := range r.Suggestions {
+		if s.Primary {
+			hasPrimary = true
+			break
+		}
+	}
+	if !hasPrimary && len(r.Suggestions) > 0 {
+		r.Suggestions[0].Primary = true
+	}
+
 	var lines []string
 
 	// Collect primary

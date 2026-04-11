@@ -40,10 +40,25 @@ func TestPerToolOnOff(t *testing.T) {
 
 	require.NoError(t, s.On("git", ""))
 	assert.True(t, s.IsEnabled("git"))
+	// docker has no override; global is off → false
 	assert.False(t, s.IsEnabled("docker"))
 
 	require.NoError(t, s.Off("git"))
+	// explicitly disabled, should be false even if global were on
 	assert.False(t, s.IsEnabled("git"))
+}
+
+func TestPerToolFallsBackToGlobal(t *testing.T) {
+	tmpStateDir(t)
+	s := toggle.NewStore()
+
+	require.NoError(t, s.On("", ""))
+	// no per-tool override → falls back to global (enabled)
+	assert.True(t, s.IsEnabled("docker"))
+
+	// explicit off overrides global
+	require.NoError(t, s.Off("docker"))
+	assert.False(t, s.IsEnabled("docker"))
 }
 
 func TestModeOverride(t *testing.T) {

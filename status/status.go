@@ -4,6 +4,7 @@ package status
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"hop.top/tip/toggle"
@@ -35,7 +36,13 @@ func Write(w io.Writer, info Info) {
 	// Per-tool overrides
 	if len(tools) > 0 {
 		fmt.Fprintln(w, "\nTool overrides:")
-		for name, ts := range tools {
+		names := make([]string, 0, len(tools))
+		for name := range tools {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			ts := tools[name]
 			mode := ts.Mode
 			if mode == "" {
 				mode = "default"

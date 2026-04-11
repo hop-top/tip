@@ -2,8 +2,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -47,10 +50,13 @@ func Cmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resolve config dir: %w", err)
 			}
-			path := cfgDir + "/config.yaml"
+			path := filepath.Join(cfgDir, "config.yaml")
 
 			// Load config values via kit/config
-			vals := loadValues(path)
+			vals, err := loadValues(path)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
 
 			Write(cmd.OutOrStdout(), Info{
 				Path:   path,
@@ -62,8 +68,9 @@ func Cmd() *cobra.Command {
 }
 
 // loadValues reads the YAML config file and returns key-value pairs.
-// Returns nil if file doesn't exist or can't be parsed.
-func loadValues(path string) map[string]string {
+// Returns (nil, nil) if the file does not exist (no config set).
+// Returns a non-nil error for parse failures.
+func loadValues(path string) (map[string]string, error) {
 	cfg := struct {
 		Mode    string            `yaml:"mode"`
 		Shell   map[string]string `yaml:"shell"`
@@ -79,7 +86,10 @@ func loadValues(path string) map[string]string {
 
 	err := loadYAML(path, &cfg)
 	if err != nil {
-		return nil
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
 
 	vals := make(map[string]string)
@@ -95,7 +105,7 @@ func loadValues(path string) map[string]string {
 		}
 	}
 	if len(vals) == 0 {
-		return nil
+		return nil, nil
 	}
-	return vals
+	return vals, nil
 }

@@ -30,6 +30,7 @@ func main() {
 	root.Cmd.AddCommand(shell.Cmd())
 	root.Cmd.AddCommand(toggle.OnCmd())
 	root.Cmd.AddCommand(toggle.OffCmd())
+	root.Cmd.AddCommand(toggle.EnabledCmd())
 	root.Cmd.AddCommand(status.Cmd())
 	root.Cmd.AddCommand(config.Cmd())
 	root.Cmd.AddCommand(tipver.Cmd(tipver.Info{

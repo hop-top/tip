@@ -34,6 +34,25 @@ func OnCmd() *cobra.Command {
 	return cmd
 }
 
+// EnabledCmd returns the `tip enabled` cobra command.
+// Exits 0 if tip is globally enabled, 1 otherwise.
+func EnabledCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "enabled",
+		Short: "Check if tip is enabled (exit 0=yes, 1=no)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s := NewStore()
+			if !s.IsEnabled("") {
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				return fmt.Errorf("disabled")
+			}
+			return nil
+		},
+	}
+}
+
 // OffCmd returns the `tip off [tool]` cobra command.
 func OffCmd() *cobra.Command {
 	return &cobra.Command{

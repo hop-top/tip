@@ -63,7 +63,7 @@ func (s *Store) Off(tool string) error {
 	if tool == "" {
 		s.data.Global = ToolState{}
 	} else {
-		delete(s.data.Tools, tool)
+		s.data.Tools[tool] = ToolState{Enabled: false}
 	}
 	return s.save()
 }
@@ -81,7 +81,7 @@ func (s *Store) IsEnabled(tool string) bool {
 	if ok {
 		return ts.Enabled
 	}
-	return false
+	return s.data.Global.Enabled
 }
 
 // Mode returns the mode override for the given tool (or global).

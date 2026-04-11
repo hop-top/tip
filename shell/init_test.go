@@ -14,7 +14,7 @@ func TestZshHookOutput(t *testing.T) {
 		"__tip_preexec",
 		"__tip_precmd",
 		"add-zsh-hook",
-		"__tip_enabled",
+		"tip enabled",
 		"tip observe",
 	}
 	for _, s := range required {

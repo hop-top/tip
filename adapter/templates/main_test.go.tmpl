@@ -1,0 +1,27 @@
+package main
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestDescribeResponse(t *testing.T) {
+	resp := DescribeResponse{
+		Name:    "{{.Name}}",
+		Version: "0.0.1",
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got DescribeResponse
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Name != "{{.Name}}" {
+		t.Errorf("Name = %q, want {{.Name}}", got.Name)
+	}
+}

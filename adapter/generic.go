@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	kitllm "hop.top/kit/llm"
 	"hop.top/kit/toolspec"
 	helpSource "hop.top/kit/toolspec/sources/help"
+	llmSource "hop.top/kit/toolspec/sources/llm"
 )
 
 // MaxGenericConfidence caps confidence for generic adapter suggestions.
@@ -19,9 +21,11 @@ const MaxGenericConfidence = 0.6
 // error patterns) and returns suggestions with confidence capped at
 // MaxGenericConfidence.
 type Generic struct {
-	mu       sync.RWMutex
-	cache    map[string][]string // legacy cache for Warm/CacheHit compat
-	registry *toolspec.Registry
+	mu        sync.RWMutex
+	cache     map[string][]string // legacy cache for Warm/CacheHit compat
+	registry  *toolspec.Registry
+	llmClient kitllm.Completer // nil = no LLM
+	llmModel  string
 }
 
 // NewGeneric creates a new Generic adapter backed by a toolspec.Registry.
@@ -32,9 +36,25 @@ func NewGeneric(opts ...GenericOption) *Generic {
 		o(g)
 	}
 	if g.registry == nil {
-		g.registry = toolspec.NewRegistry(
+		sources := []toolspec.RegistryOption{
+			toolspec.WithSource(BuiltinWorkflows()),
 			toolspec.WithSource(&helpSource.HelpSource{}),
-		)
+		}
+		// LLM source last — fills gaps left by static sources.
+		// Results wrapped with enrichingSource to derive After
+		// maps from Steps.
+		if g.llmClient != nil {
+			sources = append(sources, toolspec.WithSource(
+				&enrichingSource{inner: llmSource.NewLLMSource(
+					llmSource.Config{
+						Client:  g.llmClient,
+						Model:   g.llmModel,
+						Enabled: true,
+					},
+				)},
+			))
+		}
+		g.registry = toolspec.NewRegistry(sources...)
 	}
 	return g
 }
@@ -45,6 +65,12 @@ type GenericOption func(*Generic)
 // WithRegistry sets a custom toolspec.Registry.
 func WithRegistry(r *toolspec.Registry) GenericOption {
 	return func(g *Generic) { g.registry = r }
+}
+
+// WithLLM enables the LLM fallback source for enriching workflows
+// and error patterns. Results are cached by the registry.
+func WithLLM(client kitllm.Completer, model string) GenericOption {
+	return func(g *Generic) { g.llmClient = client; g.llmModel = model }
 }
 
 // Suggest returns suggestions based on the resolved ToolSpec for the command.

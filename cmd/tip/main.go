@@ -5,9 +5,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	"hop.top/tip/adapter"
+	kitllm "hop.top/kit/llm"
+	_ "hop.top/kit/llm/anthropic" // register anthropic:// scheme
+	_ "hop.top/kit/llm/openai"    // register openai:// scheme
 	tipconfig "hop.top/tip/config"
 	tipctx "hop.top/tip/context"
 	"hop.top/tip/install"
@@ -113,7 +118,13 @@ func observeCmd() *cobra.Command {
 			if adapterPath != "" {
 				adpt = &externalAdapter{path: adapterPath}
 			} else {
-				adpt = &genericAdapter{g: adapter.NewGeneric()}
+				var opts []adapter.GenericOption
+				if llmClient := buildLLMClient(); llmClient != nil {
+					opts = append(opts, adapter.WithLLM(
+						llmClient, os.Getenv("TIP_LLM_MODEL"),
+					))
+				}
+				adpt = &genericAdapter{g: adapter.NewGeneric(opts...)}
 			}
 
 			// Build renderer.
@@ -368,5 +379,47 @@ func policyToRender(result policy.Result) render.Result {
 		}
 	}
 	return rr
+}
+
+// buildLLMClient returns an LLM client if TIP_LLM_FALLBACK=true and
+// a provider is configured. Returns nil otherwise (no LLM).
+//
+// Provider URI examples: "anthropic", "openai", "ollama".
+// Requires the corresponding API key env var (ANTHROPIC_API_KEY, etc.).
+func buildLLMClient() kitllm.Completer {
+	if os.Getenv("TIP_LLM_FALLBACK") != "true" {
+		return nil
+	}
+	uri := os.Getenv("TIP_LLM_PROVIDER")
+	if uri == "" {
+		return nil
+	}
+	// Accept bare scheme ("anthropic") or full URI ("anthropic://").
+	if !strings.Contains(uri, "://") {
+		uri = uri + "://"
+	}
+	// Pass API key from standard env vars if not in URI.
+	if !strings.Contains(uri, "api_key=") {
+		var key string
+		switch {
+		case strings.HasPrefix(uri, "openai"):
+			key = os.Getenv("OPENAI_API_KEY")
+		case strings.HasPrefix(uri, "anthropic"):
+			key = os.Getenv("ANTHROPIC_API_KEY")
+		}
+		if key != "" {
+			sep := "?"
+			if strings.Contains(uri, "?") {
+				sep = "&"
+			}
+			uri = uri + sep + "api_key=" + key
+		}
+	}
+	provider, err := kitllm.Resolve(uri)
+	if err != nil {
+		return nil
+	}
+	client := kitllm.NewClient(provider)
+	return client
 }
 

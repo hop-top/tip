@@ -1,0 +1,147 @@
+# Real command sequences extracted from shell history.
+# Each session is a sequence of commands. The "next" field
+# is what the user actually typed next — this is ground truth
+# for suggestion quality scoring.
+#
+# Quality metric: did tip's primary suggestion match "next"?
+# Score: 1.0 = exact match, 0.5 = same tool+subcommand,
+#        0.25 = same tool, 0.0 = miss
+
+sessions:
+  - name: git-feature-branch
+    description: Feature branch workflow from real session
+    commands:
+      - cmd: "git status"
+        exit: 0
+        next: "git diff --staged --check"
+      - cmd: "git diff --staged --check"
+        exit: 0
+        next: "git add .editorconfig"
+      - cmd: "git add .editorconfig"
+        exit: 0
+        next: "git status"
+      - cmd: "git status"
+        exit: 0
+        next: "git commit -m 'chore: going for speed...'"
+
+  - name: git-merge-cleanup
+    description: Merge and branch cleanup workflow
+    commands:
+      - cmd: "git checkout next"
+        exit: 0
+        next: "git merge 0016-traefik-auth-proxy"
+      - cmd: "git merge 0016-traefik-auth-proxy"
+        exit: 0
+        next: "git branch -d 0016-traefik-auth-proxy"
+      - cmd: "git branch -d 0016-traefik-auth-proxy"
+        exit: 0
+        next: "git push"
+      - cmd: "git push"
+        exit: 0
+        next: "git branch -a"
+
+  - name: git-staging-workflow
+    description: Selective staging before commit
+    commands:
+      - cmd: "git status"
+        exit: 0
+        next: "git add packages infra domain adapters apps ee"
+      - cmd: "git add packages infra domain adapters apps ee"
+        exit: 0
+        next: "git status"
+      - cmd: "git status"
+        exit: 0
+        next: "git add docs Justfile README.md"
+      - cmd: "git add docs Justfile README.md"
+        exit: 0
+        next: "git status"
+      - cmd: "git status"
+        exit: 0
+        next: "git commit -m 'chore: going for speed...'"
+
+  - name: docker-volume-cleanup
+    description: Docker volume inspection and cleanup
+    commands:
+      - cmd: "docker ps"
+        exit: 0
+        next: "docker network ls"
+      - cmd: "docker network ls"
+        exit: 0
+        next: "docker volume ls"
+      - cmd: "docker volume ls"
+        exit: 0
+        next: "docker volume rm next_clickhouse_data next_mailpit_data"
+      - cmd: "docker volume rm next_clickhouse_data next_mailpit_data"
+        exit: 0
+        next: "docker volume ls"
+
+  - name: docker-debug-logs
+    description: Docker log inspection workflow
+    commands:
+      - cmd: "docker ps"
+        exit: 0
+        next: "docker logs mysql"
+      - cmd: "docker logs mysql"
+        exit: 0
+        next: "docker logs mautic-mysql"
+      - cmd: "docker logs mautic-mysql"
+        exit: 0
+        next: "docker logs novu-worker"
+
+  - name: gh-issue-workflow
+    description: GitHub issue review and PR workflow
+    commands:
+      - cmd: "gh issue view 86"
+        exit: 0
+        next: "gh issue edit 86"
+      - cmd: "gh issue edit 86"
+        exit: 0
+        next: "git status"
+      - cmd: "gh pr checkout 91"
+        exit: 0
+        next: "git push"
+
+  - name: git-e2e-branch
+    description: Create branch and commit tests
+    commands:
+      - cmd: "git status"
+        exit: 0
+        next: "git add apps/web/e2e/ apps/web/playwright.config.ts"
+      - cmd: "git add apps/web/e2e/ apps/web/playwright.config.ts"
+        exit: 0
+        next: "git status"
+      - cmd: "git checkout -b adhoc-e2e-testing"
+        exit: 0
+        next: "git commit -m 'test(web): add e2e tests'"
+      - cmd: "git commit -m 'test(web): add e2e tests'"
+        exit: 0
+        next: "git status"
+
+  - name: npm-workflow
+    description: npm install + build + test (no builtin workflows)
+    commands:
+      - cmd: "npm install"
+        exit: 0
+        next: "npm run build"
+      - cmd: "npm run build"
+        exit: 0
+        next: "npm test"
+      - cmd: "npm test"
+        exit: 0
+        next: "npm run dev"
+
+  - name: git-selective-staging
+    description: Interactive staging with restore
+    commands:
+      - cmd: "git diff adapters/"
+        exit: 0
+        next: "git status"
+      - cmd: "git add ."
+        exit: 0
+        next: "git restore --staged remarks.md"
+      - cmd: "git restore --staged remarks.md"
+        exit: 0
+        next: "git status"
+      - cmd: "git status"
+        exit: 0
+        next: "gh repo view --web"

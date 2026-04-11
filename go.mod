@@ -42,3 +42,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.48.0 // indirect
 )
+
+replace hop.top/kit => /Users/jadb/.w/ideacrafterslabs/kit/hops/feat/toolspec

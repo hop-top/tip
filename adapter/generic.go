@@ -7,28 +7,172 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"hop.top/kit/toolspec"
+	helpSource "hop.top/kit/toolspec/sources/help"
 )
 
 // MaxGenericConfidence caps confidence for generic adapter suggestions.
 const MaxGenericConfidence = 0.6
 
 // Generic is the built-in Level 0 adapter that works with any CLI tool.
-// It parses `<cmd> --help` output to extract subcommands and returns
-// suggestions with confidence capped at MaxGenericConfidence.
+// It uses a toolspec.Registry to resolve tool specs (subcommands, workflows,
+// error patterns) and returns suggestions with confidence capped at
+// MaxGenericConfidence.
 type Generic struct {
-	mu    sync.RWMutex
-	cache map[string][]string // cmd -> subcommands
+	mu       sync.RWMutex
+	cache    map[string][]string // legacy cache for Warm/CacheHit compat
+	registry *toolspec.Registry
 }
 
-// NewGeneric creates a new Generic adapter with an empty cache.
-func NewGeneric() *Generic {
-	return &Generic{cache: make(map[string][]string)}
+// NewGeneric creates a new Generic adapter backed by a toolspec.Registry.
+// If no registry is provided, a default one is created using the help source.
+func NewGeneric(opts ...GenericOption) *Generic {
+	g := &Generic{cache: make(map[string][]string)}
+	for _, o := range opts {
+		o(g)
+	}
+	if g.registry == nil {
+		g.registry = toolspec.NewRegistry(
+			toolspec.WithSource(&helpSource.HelpSource{}),
+		)
+	}
+	return g
 }
 
-// Suggest returns suggestions based on --help output of the command.
+// GenericOption configures a Generic adapter.
+type GenericOption func(*Generic)
+
+// WithRegistry sets a custom toolspec.Registry.
+func WithRegistry(r *toolspec.Registry) GenericOption {
+	return func(g *Generic) { g.registry = r }
+}
+
+// Suggest returns suggestions based on the resolved ToolSpec for the command.
+// It uses subcommands, workflows, and error patterns from the spec.
 func (g *Generic) Suggest(envelope ContextEnvelope) *SuggestResponse {
-	subs := g.subcommands(envelope.Cmd)
-	if len(subs) == 0 {
+	spec, err := g.registry.Resolve(envelope.Cmd)
+	if err != nil || spec == nil {
+		// Fall back to legacy cache if registry fails.
+		return g.suggestFromCache(envelope)
+	}
+
+	var suggestions []Suggestion
+
+	// 1. Workflow-aware: if the command matches a workflow step, suggest next steps.
+	suggestions = append(suggestions, g.workflowSuggestions(spec, envelope)...)
+
+	// 2. Error recovery: if exit code != 0 and stderr present, check error patterns.
+	if envelope.ExitCode != 0 && envelope.Stderr != "" {
+		if rec := g.errorRecovery(spec, envelope); rec != nil {
+			return &SuggestResponse{
+				Intent:      envelope.Cmd,
+				Stage:       "generic",
+				Suggestions: suggestions,
+				Recovery:    rec,
+			}
+		}
+	}
+
+	// 3. Subcommand suggestions from spec.Commands.
+	if len(suggestions) == 0 {
+		suggestions = g.subcommandSuggestions(spec, envelope)
+	}
+
+	// If still nothing, try legacy cache (for Warm'd entries).
+	if len(suggestions) == 0 {
+		return g.suggestFromCache(envelope)
+	}
+
+	return &SuggestResponse{
+		Intent:      envelope.Cmd,
+		Stage:       "generic",
+		Suggestions: suggestions,
+	}
+}
+
+// subcommandSuggestions builds suggestions from spec.Commands.
+func (g *Generic) subcommandSuggestions(spec *toolspec.ToolSpec, envelope ContextEnvelope) []Suggestion {
+	if len(spec.Commands) == 0 {
+		return nil
+	}
+
+	limit := min(3, len(spec.Commands))
+	suggestions := make([]Suggestion, 0, limit)
+	for i := 0; i < limit; i++ {
+		conf := MaxGenericConfidence - float64(i)*0.1
+		if conf < 0.1 {
+			conf = 0.1
+		}
+		suggestions = append(suggestions, Suggestion{
+			Text:       envelope.Cmd + " " + spec.Commands[i].Name,
+			Confidence: conf,
+			Primary:    i == 0,
+		})
+	}
+	return suggestions
+}
+
+// workflowSuggestions checks if envelope.Cmd matches a workflow step and
+// returns next-step suggestions from Workflow.After.
+func (g *Generic) workflowSuggestions(spec *toolspec.ToolSpec, envelope ContextEnvelope) []Suggestion {
+	// Build a full command string (cmd + first arg) for matching.
+	fullCmd := envelope.Cmd
+	if len(envelope.Args) > 0 {
+		fullCmd = envelope.Cmd + " " + envelope.Args[0]
+	}
+
+	var suggestions []Suggestion
+	for _, wf := range spec.Workflows {
+		nextSteps, ok := wf.After[fullCmd]
+		if !ok {
+			// Try bare cmd without args.
+			nextSteps, ok = wf.After[envelope.Cmd]
+		}
+		if !ok {
+			continue
+		}
+		for i, step := range nextSteps {
+			if i >= 3 {
+				break
+			}
+			conf := MaxGenericConfidence - float64(i)*0.1
+			if conf < 0.1 {
+				conf = 0.1
+			}
+			suggestions = append(suggestions, Suggestion{
+				Text:       step,
+				Confidence: conf,
+				Primary:    i == 0,
+				Reason:     "workflow: " + wf.Name,
+			})
+		}
+	}
+	return suggestions
+}
+
+// errorRecovery checks spec.ErrorPatterns against envelope.Stderr.
+func (g *Generic) errorRecovery(spec *toolspec.ToolSpec, envelope ContextEnvelope) *Suggestion {
+	for _, ep := range spec.ErrorPatterns {
+		if strings.Contains(envelope.Stderr, ep.Pattern) {
+			return &Suggestion{
+				Text:       ep.Fix,
+				Confidence: MaxGenericConfidence,
+				Primary:    true,
+				Reason:     "error recovery",
+			}
+		}
+	}
+	return nil
+}
+
+// suggestFromCache uses the legacy Warm cache for backward compat.
+func (g *Generic) suggestFromCache(envelope ContextEnvelope) *SuggestResponse {
+	g.mu.RLock()
+	subs, ok := g.cache[envelope.Cmd]
+	g.mu.RUnlock()
+
+	if !ok || len(subs) == 0 {
 		return nil
 	}
 
@@ -56,6 +200,7 @@ func (g *Generic) Suggest(envelope ContextEnvelope) *SuggestResponse {
 }
 
 // subcommands returns cached subcommands or parses --help output.
+// Deprecated: kept for backward compatibility; use Registry.Resolve instead.
 func (g *Generic) subcommands(cmd string) []string {
 	g.mu.RLock()
 	if subs, ok := g.cache[cmd]; ok {
@@ -74,6 +219,7 @@ func (g *Generic) subcommands(cmd string) []string {
 }
 
 // parseHelp runs `cmd --help` and extracts subcommand names.
+// Deprecated: use kit/toolspec/sources/help instead.
 func parseHelp(cmd string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
@@ -88,13 +234,8 @@ func parseHelp(cmd string) []string {
 }
 
 // ParseHelpOutput extracts subcommand names from --help output text.
-// Handles multiple CLI frameworks:
-//   - Cobra/Docker: "Commands:", "Available Commands:", etc.
-//   - gh (cli/cli): "CORE COMMANDS", "ADDITIONAL COMMANDS" (ALL-CAPS, no colon)
-//   - wrangler (yargs): "COMMANDS", "COMPUTE & AI" (ALL-CAPS categories)
-//   - git: prose category headers with indented subcommands
-//
-// Exported for testing.
+// Deprecated: use kit/toolspec/sources/help.ParseHelpOutput instead.
+// Kept exported for backward compatibility.
 func ParseHelpOutput(text string) []string {
 	var (
 		subs    []string
@@ -108,29 +249,20 @@ func ParseHelpOutput(text string) []string {
 		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
 
-		// Check if this line is a section header that precedes
-		// subcommand listings. Multiple formats supported:
-
 		if isSectionHeader(trimmed, lower) {
 			inBlock = true
 			continue
 		}
 
-		// Non-section-header, non-indented line ends the block
-		// (unless it's empty, which also ends it).
 		if inBlock {
 			if trimmed == "" {
 				inBlock = false
 				continue
 			}
 
-			// Must be indented (leading whitespace) to be a
-			// subcommand line — non-indented = new section or
-			// end of block.
 			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
-				// Could be the next section header.
 				if isSectionHeader(trimmed, lower) {
-					continue // stay in block mode
+					continue
 				}
 				inBlock = false
 				continue
@@ -153,19 +285,11 @@ func ParseHelpOutput(text string) []string {
 // isSectionHeader checks if a line is a header that precedes
 // a subcommand listing.
 func isSectionHeader(trimmed, lower string) bool {
-	// Pattern 1: ends with "commands:" or "subcommands:"
-	// Matches: "Available Commands:", "Common Commands:",
-	//          "Management Commands:", "Other subcommands:"
 	if strings.HasSuffix(lower, "commands:") ||
 		strings.HasSuffix(lower, "subcommands:") {
 		return true
 	}
 
-	// Pattern 2: ALL-CAPS line that is likely a category header.
-	// Matches: "CORE COMMANDS", "COMMANDS", "COMPUTE & AI",
-	//          "STORAGE & DATABASES", "ACCOUNT"
-	// Excludes: "FLAGS", "OPTIONS", "USAGE", "HELP TOPICS",
-	//           "GLOBAL FLAGS", "EXAMPLES", "LEARN MORE"
 	if isAllCaps(trimmed) && len(trimmed) > 2 {
 		if isNonCommandSection(lower) {
 			return false
@@ -173,22 +297,11 @@ func isSectionHeader(trimmed, lower string) bool {
 		return true
 	}
 
-	// Pattern 3: git-style prose category header.
-	// Lines like "start a working area (see also: ...)" followed
-	// by 3-space-indented subcommands. Detected by checking if
-	// the line is not indented, contains lowercase words, and is
-	// followed by indented content (handled by the caller staying
-	// in block mode).
 	if strings.Contains(lower, "(see also:") ||
 		strings.Contains(lower, "these are common") {
 		return true
 	}
 
-	// Pattern 4: git category without parenthetical.
-	// Lines like "grow, mark and tweak your common history"
-	// or "collaborate (see also: git help workflows)"
-	// Heuristic: non-indented, all lowercase, no flag-like
-	// chars, and not a usage/description line.
 	if isGitCategory(trimmed, lower) {
 		return true
 	}
@@ -211,8 +324,6 @@ func isAllCaps(s string) bool {
 	return hasLetter
 }
 
-// isNonCommandSection returns true for ALL-CAPS headers that
-// list flags, options, or help topics rather than subcommands.
 var skipSections = map[string]bool{
 	"flags": true, "global flags": true, "global options": true,
 	"options": true, "usage": true, "examples": true,
@@ -225,30 +336,19 @@ func isNonCommandSection(lower string) bool {
 	return skipSections[lower]
 }
 
-// isGitCategory detects git-style prose category headers.
-// These are non-indented, all-lowercase lines that describe
-// a group of subcommands.
 func isGitCategory(trimmed, lower string) bool {
 	if trimmed == "" || trimmed != lower {
-		return false // must be all lowercase
+		return false
 	}
 	if strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "'") {
-		return false // flags or quotes
+		return false
 	}
-	// Must contain a comma or "and" — git categories are phrases
-	// like "grow, mark and tweak your common history"
 	if !strings.Contains(lower, ",") && !strings.Contains(lower, " and ") {
 		return false
 	}
 	return true
 }
 
-// extractSubcommand extracts the subcommand name from an indented line.
-// Handles multiple formats:
-//   - "  name        Description..."         (docker, cobra)
-//   - "  name:       Description..."         (gh)
-//   - "  prefix name [args]  📚 Description" (wrangler)
-//   - "   name     Description..."           (git, 3-space indent)
 func extractSubcommand(line string) string {
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
@@ -257,32 +357,25 @@ func extractSubcommand(line string) string {
 
 	name := parts[0]
 
-	// Skip lines that start with flags.
 	if strings.HasPrefix(name, "-") {
 		return ""
 	}
 
-	// wrangler format: "wrangler <subcommand> [args]..."
-	// The actual subcommand is parts[1].
 	if len(parts) > 1 && (name == "wrangler" || name == "gh" ||
 		name == "docker" || name == "git") {
 		name = parts[1]
 	}
 
-	// gh format: "name:" — strip trailing colon.
 	name = strings.TrimSuffix(name, ":")
 
-	// Skip names with brackets (args like "[search..]").
 	if strings.HasPrefix(name, "[") || strings.HasPrefix(name, "<") {
 		return ""
 	}
 
-	// Skip emoji-only tokens.
 	if len(name) > 0 && name[0] > 127 {
 		return ""
 	}
 
-	// Skip names that look like decorators or noise.
 	if strings.Contains(name, "*") {
 		name = strings.TrimSuffix(name, "*")
 	}

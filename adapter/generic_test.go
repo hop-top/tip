@@ -2,6 +2,8 @@ package adapter
 
 import (
 	"testing"
+
+	"hop.top/kit/toolspec"
 )
 
 func TestParseHelpOutput(t *testing.T) {
@@ -303,5 +305,148 @@ func TestGenericSuggestPrimary(t *testing.T) {
 		if s.Primary {
 			t.Errorf("non-first suggestion %q should not be primary", s.Text)
 		}
+	}
+}
+
+// testSource is a toolspec.Source that returns a fixed spec.
+type testSource struct {
+	spec *toolspec.ToolSpec
+}
+
+func (s *testSource) Resolve(_ string) (*toolspec.ToolSpec, error) {
+	return s.spec, nil
+}
+
+func TestGeneric_RegistrySubcommands(t *testing.T) {
+	spec := &toolspec.ToolSpec{
+		Name: "git",
+		Commands: []toolspec.Command{
+			{Name: "add"},
+			{Name: "commit"},
+			{Name: "push"},
+		},
+	}
+
+	reg := toolspec.NewRegistry(toolspec.WithSource(&testSource{spec: spec}))
+	g := NewGeneric(WithRegistry(reg))
+
+	resp := g.Suggest(ContextEnvelope{Cmd: "git"})
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Suggestions) != 3 {
+		t.Fatalf("got %d suggestions, want 3", len(resp.Suggestions))
+	}
+	if resp.Suggestions[0].Text != "git add" {
+		t.Errorf("first suggestion = %q, want %q", resp.Suggestions[0].Text, "git add")
+	}
+	if !resp.Suggestions[0].Primary {
+		t.Error("first suggestion should be primary")
+	}
+}
+
+func TestGeneric_WorkflowSuggestion(t *testing.T) {
+	spec := &toolspec.ToolSpec{
+		Name: "git",
+		Commands: []toolspec.Command{
+			{Name: "add"},
+			{Name: "commit"},
+			{Name: "push"},
+		},
+		Workflows: []toolspec.Workflow{
+			{
+				Name:  "commit-flow",
+				Steps: []string{"git add", "git commit", "git push"},
+				After: map[string][]string{
+					"git add":    {"git commit"},
+					"git commit": {"git push"},
+				},
+			},
+		},
+	}
+
+	reg := toolspec.NewRegistry(toolspec.WithSource(&testSource{spec: spec}))
+	g := NewGeneric(WithRegistry(reg))
+
+	// After "git add", should suggest "git commit" from workflow.
+	resp := g.Suggest(ContextEnvelope{
+		Cmd:  "git",
+		Args: []string{"add"},
+	})
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Suggestions) == 0 {
+		t.Fatal("expected workflow suggestions")
+	}
+	if resp.Suggestions[0].Text != "git commit" {
+		t.Errorf("workflow suggestion = %q, want %q",
+			resp.Suggestions[0].Text, "git commit")
+	}
+	if resp.Suggestions[0].Reason != "workflow: commit-flow" {
+		t.Errorf("reason = %q, want %q",
+			resp.Suggestions[0].Reason, "workflow: commit-flow")
+	}
+}
+
+func TestGeneric_ErrorRecovery(t *testing.T) {
+	spec := &toolspec.ToolSpec{
+		Name: "git",
+		ErrorPatterns: []toolspec.ErrorPattern{
+			{
+				Pattern: "not a git repository",
+				Fix:     "git init",
+			},
+		},
+	}
+
+	reg := toolspec.NewRegistry(toolspec.WithSource(&testSource{spec: spec}))
+	g := NewGeneric(WithRegistry(reg))
+
+	resp := g.Suggest(ContextEnvelope{
+		Cmd:      "git",
+		Args:     []string{"status"},
+		ExitCode: 128,
+		Stderr:   "fatal: not a git repository (or any parent)",
+	})
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if resp.Recovery == nil {
+		t.Fatal("expected recovery suggestion")
+	}
+	if resp.Recovery.Text != "git init" {
+		t.Errorf("recovery = %q, want %q", resp.Recovery.Text, "git init")
+	}
+}
+
+func TestGeneric_WorkflowBareCmd(t *testing.T) {
+	// Test that workflow matching works with bare cmd (no args).
+	spec := &toolspec.ToolSpec{
+		Name: "docker",
+		Workflows: []toolspec.Workflow{
+			{
+				Name:  "build-run",
+				Steps: []string{"docker build", "docker run"},
+				After: map[string][]string{
+					"docker": {"docker build"},
+				},
+			},
+		},
+	}
+
+	reg := toolspec.NewRegistry(toolspec.WithSource(&testSource{spec: spec}))
+	g := NewGeneric(WithRegistry(reg))
+
+	resp := g.Suggest(ContextEnvelope{Cmd: "docker"})
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Suggestions) == 0 {
+		t.Fatal("expected workflow suggestions for bare cmd")
+	}
+	if resp.Suggestions[0].Text != "docker build" {
+		t.Errorf("suggestion = %q, want %q",
+			resp.Suggestions[0].Text, "docker build")
 	}
 }

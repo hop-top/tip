@@ -1,0 +1,78 @@
+services:
+  # --- Standard (tip only) ---
+  test:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: ["make", "check"]
+    volumes:
+      - go-cache:/home/dev/go
+
+  bench:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: ["zsh", "-c", "tip status && echo 'bench ready'"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - go-cache:/home/dev/go
+    environment:
+      - TIP_STATE_DIR=/tmp/tip-bench
+
+  dev:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: ["zsh"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - go-cache:/home/dev/go
+
+  # --- RTK-enabled (tip + rtk) ---
+  test-rtk:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: ["make", "check"]
+    volumes:
+      - go-cache:/home/dev/go
+    environment:
+      - RTK_ENABLED=1
+
+  bench-rtk:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: >-
+      zsh -c "
+        eval \"$(rtk init zsh 2>/dev/null || true)\" &&
+        eval \"$(tip init zsh)\" &&
+        tip status &&
+        echo 'bench-rtk ready (tip + rtk)'
+      "
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - go-cache:/home/dev/go
+    environment:
+      - TIP_STATE_DIR=/tmp/tip-bench
+      - RTK_ENABLED=1
+
+  dev-rtk:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    command: ["zsh"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - go-cache:/home/dev/go
+    environment:
+      - RTK_ENABLED=1
+
+volumes:
+  go-cache:

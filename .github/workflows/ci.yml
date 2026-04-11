@@ -8,13 +8,22 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      GOPRIVATE: "hop.top/*,github.com/hop-top/*"
+      GONOSUMCHECK: "hop.top/*,github.com/hop-top/*"
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: stable
           cache: true
+
+      - name: Configure private modules
+        env:
+          TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
 
       - name: Tidy
         run: |

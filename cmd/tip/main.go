@@ -195,8 +195,8 @@ func adapterListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List discovered adapters",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			for _, name := range adapter.List() {
-				fmt.Fprintln(cmd.OutOrStdout(), name)
+			for _, info := range adapter.List() {
+				fmt.Fprintln(cmd.OutOrStdout(), info.Name)
 			}
 			return nil
 		},

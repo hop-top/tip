@@ -2,7 +2,7 @@
 # Includes all 5 adapter target tools (git, gh, docker, wrangler, mmdc)
 # plus tip + ben for real-workflow benchmarking.
 # Uses 1.24 base + GOTOOLCHAIN=auto to fetch go1.26.
-FROM golang:1.24-bookworm
+FROM golang:1.24-trixie
 
 ARG USERNAME=dev
 ARG USER_UID=1000
@@ -38,7 +38,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
     | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) \
     signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
-    https://download.docker.com/linux/debian bookworm stable" \
+    https://download.docker.com/linux/debian trixie stable" \
     > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y docker-ce-cli \
@@ -62,7 +62,7 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
 USER ${USERNAME}
 ENV GOPATH=/home/${USERNAME}/go
 ENV GOTOOLCHAIN=auto
-ENV PATH=${GOPATH}/bin:${PATH}
+ENV PATH=/home/dev/.local/bin:${GOPATH}/bin:${PATH}
 
 WORKDIR /workspace
 
@@ -81,9 +81,10 @@ RUN GONOSUMCHECK="hop.top/*" GOPRIVATE="hop.top/*" \
     go install hop.top/ben/cmd/ben@latest 2>/dev/null || true
 
 # --- Install rtk (CLI proxy for token compression) ---
-RUN curl -fsSL \
+RUN mkdir -p /home/dev/.local/bin \
+    && curl -fsSL \
     https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh \
-    | sh 2>/dev/null || true
+    | sh
 
 # --- Verify tools ---
 RUN echo "=== Tool versions ===" \
@@ -93,6 +94,7 @@ RUN echo "=== Tool versions ===" \
     && wrangler --version \
     && mmdc --version \
     && tip version \
+    && rtk --version \
     && echo "=== All tools present ==="
 
 CMD ["zsh"]

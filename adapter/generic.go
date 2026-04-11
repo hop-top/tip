@@ -120,6 +120,9 @@ func ParseHelpOutput(text string) []string {
 			}
 		}
 	}
+	if scanner.Err() != nil {
+		return nil
+	}
 
 	return subs
 }

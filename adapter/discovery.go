@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 // PluginDir is the default directory for adapter binaries.
@@ -34,8 +35,16 @@ func DiscoverWithHome(cmd, home string) string {
 		}
 	}
 	pluginPath := filepath.Join(home, PluginDir, name)
-	if fi, err := os.Stat(pluginPath); err == nil && !fi.IsDir() {
+	if fi, err := os.Stat(pluginPath); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
 		return pluginPath
+	}
+
+	// On Windows, also check for .exe extension.
+	if runtime.GOOS == "windows" {
+		exePath := pluginPath + ".exe"
+		if fi, err := os.Stat(exePath); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return exePath
+		}
 	}
 
 	return ""

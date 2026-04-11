@@ -56,7 +56,7 @@ func normalizeVersion(v string) string {
 	if v == "latest" || v == "" {
 		return "latest"
 	}
-	if !strings.HasPrefix(v, "v") {
+	if len(v) > 0 && v[0] >= '0' && v[0] <= '9' {
 		return "v" + v
 	}
 	return v

@@ -2,8 +2,10 @@ package adapter
 
 import (
 	"embed"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 )
@@ -17,9 +19,18 @@ type ScaffoldData struct {
 	Module string // e.g. "hop.top/tip-git"
 }
 
+// validName matches lowercase alphanumeric, hyphens, and underscores.
+var validName = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 // Scaffold creates a new adapter project directory with template files.
 // dir is the parent directory; a tip-<name>/ subdirectory is created.
 func Scaffold(dir, name string) (string, error) {
+	if strings.Contains(name, string(os.PathSeparator)) ||
+		strings.Contains(name, "..") ||
+		!validName.MatchString(name) {
+		return "", fmt.Errorf("invalid adapter name %q: must match [a-z0-9_-]", name)
+	}
+
 	data := ScaffoldData{
 		Name:   name,
 		Module: "hop.top/tip-" + name,

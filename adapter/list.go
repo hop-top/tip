@@ -3,6 +3,7 @@ package adapter
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -27,6 +28,9 @@ func ListWithHome(home string) []AdapterInfo {
 	// 1. Scan $PATH
 	pathDirs := filepath.SplitList(os.Getenv("PATH"))
 	for _, dir := range pathDirs {
+		if dir == "" {
+			continue
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -35,7 +39,15 @@ func ListWithHome(home string) []AdapterInfo {
 			if e.IsDir() || !strings.HasPrefix(e.Name(), "tip-") {
 				continue
 			}
-			name := strings.TrimPrefix(e.Name(), "tip-")
+			fi, err := e.Info()
+			if err != nil || fi.Mode()&0o111 == 0 {
+				continue
+			}
+			eName := e.Name()
+			if runtime.GOOS == "windows" {
+				eName = strings.TrimSuffix(eName, ".exe")
+			}
+			name := strings.TrimPrefix(eName, "tip-")
 			if seen[name] {
 				continue
 			}

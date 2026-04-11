@@ -39,11 +39,6 @@ Other subcommands:
   baz   Do baz
 `
 	subs := ParseHelpOutput(helpText)
-	if len(subs) != 2 {
-		// "Other subcommands:" ends with "subcommands:" so baz is included
-		// Actually our parser checks HasSuffix "commands:" which matches
-		// "subcommands:" too. Let's verify.
-	}
 	// "Commands:" -> foo, bar. "Other subcommands:" -> baz
 	want := []string{"foo", "bar", "baz"}
 	if len(subs) != len(want) {

@@ -3,17 +3,22 @@ package adapter
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestDiscoverInPATH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script not executable on Windows")
+	}
+
 	tmp := t.TempDir()
 	bin := filepath.Join(tmp, "tip-fakecli")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	t.Setenv("PATH", tmp+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", tmp+string(os.PathListSeparator)+os.Getenv("PATH"))
 	got := Discover("fakecli")
 	if got == "" {
 		t.Fatal("expected to find tip-fakecli in PATH")

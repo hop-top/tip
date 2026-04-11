@@ -1,0 +1,37 @@
+name: git-commit-push
+description: Token cost of git add+commit+push across raw/rtk/tip+rtk
+version: 1
+
+task:
+  prompt: "git add + commit"
+  input:
+    repo: /tmp/ben-tip-repo
+
+candidates:
+  - name: raw
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      git add -A && git commit -m "bench: test commit" --allow-empty
+  - name: rtk
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      rtk git add -A && rtk git commit -m "bench: test commit" --allow-empty
+  - name: tip+rtk
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      rtk git add -A;
+      tip observe --cmd-line "git add -A" --exit $?;
+      rtk git commit -m "bench: test commit" --allow-empty;
+      tip observe --cmd-line "git commit -m bench" --exit $?
+
+metrics:
+  - output_size
+  - latency_ms
+
+scorer:
+  strategy: single
+  weights:
+    output_size: 1.0

@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e lint tidy check clean \
+.PHONY: build test test-e2e lint tidy check clean bench \
        docker-build docker-test docker-dev docker-bench \
        docker-test-rtk docker-dev-rtk docker-bench-rtk
 

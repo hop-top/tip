@@ -1,0 +1,31 @@
+name: git-status
+description: Token cost of git status across raw/rtk/tip+rtk
+version: 1
+
+task:
+  prompt: "git status"
+  input:
+    repo: /tmp/ben-tip-repo
+
+candidates:
+  - name: raw
+    adapter: cli
+    cmd: "cd {{input.repo}} && git status"
+  - name: rtk
+    adapter: cli
+    cmd: "cd {{input.repo}} && rtk git status"
+  - name: tip+rtk
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      rtk git status;
+      tip observe --cmd-line "git status" --exit $?
+
+metrics:
+  - output_size
+  - latency_ms
+
+scorer:
+  strategy: single
+  weights:
+    output_size: 1.0

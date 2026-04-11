@@ -1,0 +1,31 @@
+name: git-log
+description: Token cost of git log across raw/rtk/tip+rtk
+version: 1
+
+task:
+  prompt: "git log"
+  input:
+    repo: /tmp/ben-tip-repo
+
+candidates:
+  - name: raw
+    adapter: cli
+    cmd: "cd {{input.repo}} && git log --oneline -10"
+  - name: rtk
+    adapter: cli
+    cmd: "cd {{input.repo}} && rtk git log -n 10"
+  - name: tip+rtk
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      rtk git log -n 10;
+      tip observe --cmd-line "git log --oneline -10" --exit $?
+
+metrics:
+  - output_size
+  - latency_ms
+
+scorer:
+  strategy: single
+  weights:
+    output_size: 1.0

@@ -1,0 +1,31 @@
+name: git-diff
+description: Token cost of git diff across raw/rtk/tip+rtk
+version: 1
+
+task:
+  prompt: "git diff"
+  input:
+    repo: /tmp/ben-tip-repo
+
+candidates:
+  - name: raw
+    adapter: cli
+    cmd: "cd {{input.repo}} && git diff"
+  - name: rtk
+    adapter: cli
+    cmd: "cd {{input.repo}} && rtk git diff"
+  - name: tip+rtk
+    adapter: cli
+    cmd: >-
+      cd {{input.repo}} &&
+      rtk git diff;
+      tip observe --cmd-line "git diff" --exit $?
+
+metrics:
+  - output_size
+  - latency_ms
+
+scorer:
+  strategy: single
+  weights:
+    output_size: 1.0

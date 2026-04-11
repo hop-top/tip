@@ -1,0 +1,89 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+// DescribeResponse is the adapter metadata.
+type DescribeResponse struct {
+	Name         string   `json:"name"`
+	Version      string   `json:"version"`
+	Commands     []string `json:"commands,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// ContextEnvelope is the input for suggest.
+type ContextEnvelope struct {
+	Cmd      string   `json:"cmd"`
+	Args     []string `json:"args"`
+	ExitCode int      `json:"exit_code"`
+	Stderr   string   `json:"stderr,omitempty"`
+	Cwd      string   `json:"cwd,omitempty"`
+}
+
+// Suggestion is a single next-step suggestion.
+type Suggestion struct {
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
+	Primary    bool    `json:"primary,omitempty"`
+	Reason     string  `json:"reason,omitempty"`
+}
+
+// SuggestResponse is the output for suggest.
+type SuggestResponse struct {
+	Intent      string       `json:"intent"`
+	Stage       string       `json:"stage"`
+	Suggestions []Suggestion `json:"suggestions"`
+	Recovery    *Suggestion  `json:"recovery,omitempty"`
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: tip-{{.Name}} <describe|suggest>")
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "describe":
+		describe()
+	case "suggest":
+		suggest()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
+		os.Exit(1)
+	}
+}
+
+func describe() {
+	resp := DescribeResponse{
+		Name:     "{{.Name}}",
+		Version:  "0.0.1",
+		Commands: []string{},
+	}
+	json.NewEncoder(os.Stdout).Encode(resp)
+}
+
+func suggest() {
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	var env ContextEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		os.Exit(1)
+	}
+
+	resp := SuggestResponse{
+		Intent:      env.Cmd,
+		Stage:       "post",
+		Suggestions: []Suggestion{},
+	}
+
+	// TODO: Add {{.Name}}-specific suggestions here.
+
+	json.NewEncoder(os.Stdout).Encode(resp)
+}

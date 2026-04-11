@@ -7,6 +7,7 @@ package observe
 
 import (
 	"fmt"
+	"log"
 
 	tipctx "hop.top/tip/context"
 	"hop.top/tip/mode"
@@ -63,7 +64,12 @@ func Run(p Params) error {
 		if err != nil {
 			return fmt.Errorf("session: %w", err)
 		}
-		history, _ = p.Store.History(ctxBackground(), sess.ID, 10)
+		// Best-effort: history load failure is non-fatal since observe
+		// can still produce useful output without prior commands.
+		history, err = p.Store.History(ctxBackground(), sess.ID, 10)
+		if err != nil {
+			log.Printf("tip: load history (best-effort): %v", err)
+		}
 	}
 
 	// Build context envelope.
@@ -88,12 +94,16 @@ func Run(p Params) error {
 	})
 
 	// Record command in session.
+	// Best-effort: command recording failure is non-fatal; the primary
+	// value of observe is the suggestion output, not the audit trail.
 	if p.Store != nil && sess != nil {
-		_ = p.Store.AppendCommand(ctxBackground(), sess.ID, session.Command{
+		if err := p.Store.AppendCommand(ctxBackground(), sess.ID, session.Command{
 			Cmd:      parsed.Cmd,
 			Args:     parsed.Args,
 			ExitCode: p.ExitCode,
-		})
+		}); err != nil {
+			log.Printf("tip: append command (best-effort): %v", err)
+		}
 	}
 
 	// Transparent mode: record but skip render.

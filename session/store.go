@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"hop.top/kit/sqlstore"
@@ -22,7 +23,7 @@ import (
 const migrateSQL = `
 CREATE TABLE IF NOT EXISTS sessions (
   id          TEXT PRIMARY KEY,
-  cwd         TEXT NOT NULL,
+  cwd         TEXT NOT NULL UNIQUE,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -83,7 +84,7 @@ func Open() (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve data dir: %w", err)
 	}
-	return OpenAt(dataDir + "/sessions.db")
+	return OpenAt(filepath.Join(dataDir, "sessions.db"))
 }
 
 // OpenAt creates or opens the session database at the given path.
@@ -111,32 +112,24 @@ func (s *Store) FindOrCreateSession(
 	db := s.kv.DB()
 	now := time.Now().Unix()
 
+	id := newID()
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO sessions (id, cwd, created_at, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(cwd) DO UPDATE SET updated_at = ?`,
+		id, cwd, now, now, now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("upsert session: %w", err)
+	}
+
 	var sess Session
-	err := db.QueryRowContext(ctx,
+	if err := db.QueryRowContext(ctx,
 		`SELECT id, cwd, created_at, updated_at FROM sessions WHERE cwd = ?`,
 		cwd,
-	).Scan(&sess.ID, &sess.Cwd, &sess.CreatedAt, &sess.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		id := newID()
-		_, err = db.ExecContext(ctx,
-			`INSERT INTO sessions (id, cwd, created_at, updated_at)
-			 VALUES (?, ?, ?, ?)`,
-			id, cwd, now, now,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create session: %w", err)
-		}
-		return &Session{ID: id, Cwd: cwd, CreatedAt: now, UpdatedAt: now}, nil
-	}
-	if err != nil {
+	).Scan(&sess.ID, &sess.Cwd, &sess.CreatedAt, &sess.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("find session: %w", err)
 	}
-
-	// Touch updated_at.
-	_, _ = db.ExecContext(ctx,
-		`UPDATE sessions SET updated_at = ? WHERE id = ?`, now, sess.ID)
-	sess.UpdatedAt = now
 	return &sess, nil
 }
 
@@ -189,7 +182,9 @@ func (s *Store) History(
 		); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal([]byte(argsJSON), &c.Args)
+		if err := json.Unmarshal([]byte(argsJSON), &c.Args); err != nil {
+			return nil, fmt.Errorf("unmarshal command args: %w", err)
+		}
 		c.Intent = intent.String
 		c.Stage = stage.String
 		c.Adapter = adapter.String
@@ -205,6 +200,8 @@ func (s *Store) History(
 // newID returns a short random hex ID prefixed with "s-".
 func newID() string {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failure: " + err.Error())
+	}
 	return "s-" + hex.EncodeToString(b)
 }

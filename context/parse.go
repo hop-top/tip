@@ -39,16 +39,38 @@ func Parse(raw string) Parsed {
 
 // lastInChain returns the last segment after splitting on &&, ;, or |.
 // Pipe is included because the exit code comes from the last command
-// in the pipeline.
+// in the pipeline. Separators inside single or double quotes are ignored.
 func lastInChain(s string) string {
-	// Split on && and ; first, then | within the last segment.
-	best := s
-	for _, sep := range []string{"&&", ";", "|"} {
-		if idx := strings.LastIndex(best, sep); idx >= 0 {
-			best = best[idx+len(sep):]
+	var inSingle, inDouble bool
+	lastSep := -1 // index past the last unquoted separator
+	sepLen := 0
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case ch == '\'' && !inDouble:
+			inSingle = !inSingle
+		case ch == '"' && !inSingle:
+			inDouble = !inDouble
+		case !inSingle && !inDouble:
+			if ch == ';' {
+				lastSep = i
+				sepLen = 1
+			} else if ch == '|' && (i == 0 || s[i-1] != '|') &&
+				(i+1 >= len(s) || s[i+1] != '|') {
+				lastSep = i
+				sepLen = 1
+			} else if ch == '&' && i+1 < len(s) && s[i+1] == '&' {
+				lastSep = i
+				sepLen = 2
+				i++ // skip second '&'
+			}
 		}
 	}
-	return best
+	if lastSep < 0 {
+		return s
+	}
+	return s[lastSep+sepLen:]
 }
 
 // tokenize performs a simple shell-like split respecting single and

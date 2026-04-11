@@ -59,3 +59,20 @@ func TestParseMixedChain(t *testing.T) {
 	assert.Equal(t, "tee", p.Cmd)
 	assert.Equal(t, []string{"log.txt"}, p.Args)
 }
+
+func TestParseQuotedChainSeparators(t *testing.T) {
+	// Semicolons inside quotes must not split the chain.
+	p := Parse(`echo "hello; world"`)
+	assert.Equal(t, "echo", p.Cmd)
+	assert.Equal(t, []string{"hello; world"}, p.Args)
+
+	// Pipe inside single quotes must not split.
+	p = Parse(`grep 'a|b' file.txt`)
+	assert.Equal(t, "grep", p.Cmd)
+	assert.Equal(t, []string{"a|b", "file.txt"}, p.Args)
+
+	// && inside double quotes must not split.
+	p = Parse(`echo "foo && bar"`)
+	assert.Equal(t, "echo", p.Cmd)
+	assert.Equal(t, []string{"foo && bar"}, p.Args)
+}

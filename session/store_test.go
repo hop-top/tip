@@ -69,12 +69,11 @@ func TestAppendCommandAndHistory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Append commands.
-	for i, c := range []Command{
+	for _, c := range []Command{
 		{Cmd: "git", Args: []string{"add", "."}, ExitCode: 0},
 		{Cmd: "git", Args: []string{"commit", "-m", "wip"}, ExitCode: 0},
 		{Cmd: "git", Args: []string{"push"}, ExitCode: 1},
 	} {
-		_ = i
 		err := s.AppendCommand(ctx, sess.ID, c)
 		require.NoError(t, err)
 	}

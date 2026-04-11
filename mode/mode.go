@@ -7,6 +7,7 @@ package mode
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"hop.top/kit/config"
@@ -68,7 +69,7 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf("resolve config dir: %w", err)
 	}
 	err = config.Load(&cfg, config.Options{
-		UserConfigPath: cfgDir + "/config.yaml",
+		UserConfigPath: filepath.Join(cfgDir, "config.yaml"),
 	})
 	return cfg, err
 }

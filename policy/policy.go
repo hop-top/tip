@@ -67,6 +67,7 @@ func dedup(suggestions []Suggestion) []Suggestion {
 	var result []Suggestion
 	for _, s := range suggestions {
 		key := strings.TrimSpace(s.Text)
+		s.Text = key
 		if idx, ok := seen[key]; ok {
 			if s.Confidence > result[idx].Confidence {
 				result[idx] = s

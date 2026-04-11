@@ -1,98 +1,112 @@
 # tip
 
-Transparent shell-integrated CLI observation layer. Watches your
-commands via shell hooks and provides contextual next-step
-suggestions powered by external adapter binaries.
+Your agent just ran 40 commands. How many did it get stuck on?
 
-tip never wraps or proxies execution. It observes after the fact
-via shell hooks -- zero performance penalty, no TTY interference.
+tip is a shell observation layer that feeds contextual hints to
+whatever is driving the terminal — you, an AI agent, or both.
+One shell hook. Zero wrappers. Suggestions appear after every
+command, dimmed and ignorable.
 
-## Install
+## Why this matters for agent-augmented work
+
+AI agents execute CLI commands on your behalf. When an agent hits
+a failed `docker build` or a rejected `git push`, it either
+recovers instantly or burns tokens re-discovering what went wrong.
+
+tip gives the agent (and you) the next step inline:
+
+```
+$ git commit -m "feat: auth"
+
+→ git push
+  git log --oneline -5
+```
+
+```
+$ docker build -t app .
+
+✗ failed to resolve source
+
+  fix: docker login registry.io
+```
+
+The agent reads tip's output. You read tip's output. Same hint,
+same terminal, no extra API call.
+
+## How it works
+
+```
+command runs natively
+       ↓
+shell hook fires (precmd)
+       ↓
+tip observe --cmd-line "..." --exit $?
+       ↓
+adapter returns suggestions (JSON, 500ms budget)
+       ↓
+dimmed hint below prompt
+```
+
+tip never wraps, proxies, or intercepts. The binary runs first.
+tip reacts to the result.
+
+## Get started
 
 ```sh
 go install hop.top/tip/cmd/tip@latest
 ```
 
-## Quickstart
-
-Add to your `.zshrc` (or `.bashrc`):
+One line in `.zshrc` (or `.bashrc`):
 
 ```sh
 eval "$(tip init zsh)"
 ```
 
-Restart your shell. Now every command you run gets observed. Try:
+New shell. Done. Works for you and any agent that inherits
+the shell environment.
 
-```sh
-git add .
-git commit -m "feat: first commit"
-```
+## Agent integration
 
-tip shows a dimmed suggestion below your output:
+Agents that spawn shell sessions (Claude Code, Codex, Aider,
+custom harnesses) inherit tip automatically if the shell profile
+sources `tip init`. No agent-side configuration needed.
 
-```
--> git push
-   git log --oneline -5
-```
-
-## Modes
-
-| Mode | Behavior |
-|------|----------|
-| guided | Full pipeline: suggest + render (default) |
-| transparent | Record session, skip rendering |
-| quiet | Skip entirely |
-
-Set global mode:
+**Transparent mode** records the session without rendering — useful
+when an agent drives the terminal and you review later:
 
 ```sh
 tip on --mode transparent
 ```
 
-Per-tool override (tool name before or after flag):
+**Guided mode** renders hints the agent can parse from stdout:
 
 ```sh
-tip on git --mode guided
-tip on --mode guided git
-tip off docker
+tip on --mode guided
 ```
 
-## Commands
+**Quiet mode** disables everything — for benchmarks or batch jobs
+where observation overhead matters:
 
-```
-tip init <shell>            # output shell hook code
-tip on [<tool>] [--mode M]  # enable (opt: per-tool + mode)
-tip off [<tool>]            # disable (opt: per-tool)
-tip observe                 # called by shell hook (internal)
-tip status                  # mode, adapters, session info
-tip adapter list            # discovered adapters
-tip adapter info <name>     # adapter describe output
-tip install <ref>           # install adapter
-tip config                  # open/show config
-tip upgrade                 # self-upgrade
-tip version                 # version info
+```sh
+tip on --mode quiet
 ```
 
 ## Adapters
 
-tip discovers external `tip-<tool>` binaries in
-`$TIP_ADAPTER_PATH` (if set), `~/.local/share/tip/adapters/`,
-and `$PATH`.
-
-### Install an adapter
+Adapters are standalone binaries (`tip-<tool>`) that understand
+a specific CLI's workflows, errors, and recovery paths.
 
 ```sh
-# Bare name (resolves to hop.top/tip-git)
-tip install git
-
-# Full URI
-tip install github.com/user/tip-custom
-
-# With version
-tip install git@0.1.0
+tip install git       # → hop.top/tip-git@latest
+tip install gh        # → hop.top/tip-gh@latest
 ```
 
-### Available adapters
+Without a curated adapter, tip falls back to parsing `--help`
+output with lower confidence.
+
+Write your own in an afternoon — JSON in, JSON out:
+
+→ [Adapter Protocol](docs/adapter-protocol.md)
 
 | Adapter | Tool |
 |---------|------|
@@ -102,30 +116,51 @@ tip install git@0.1.0
 | tip-wrangler | Cloudflare Wrangler |
 | tip-mmdc | Mermaid CLI |
 
-### Writing adapters
+## Per-tool control
 
-See [Adapter Protocol](docs/adapter-protocol.md) for the full
-specification including subcommands, schemas, and examples.
+```sh
+tip off docker          # silence docker, keep everything else
+tip on git --mode guided
+tip off                 # global kill switch
+tip on                  # re-enable with configured defaults
+```
+
+## Commands
+
+```
+tip init <shell>            shell hook (zsh, bash)
+tip on [<tool>] [--mode M]  enable globally or per-tool
+tip off [<tool>]            disable globally or per-tool
+tip status                  mode, adapters, session
+tip adapter list            discovered adapters
+tip adapter info <name>     adapter metadata
+tip adapter new <name>      scaffold new adapter
+tip install <ref>           install adapter
+tip config                  config path + values
+tip version                 version
+tip upgrade                 self-upgrade
+```
 
 ## Configuration
 
-File: `~/.config/tip/config.toml`
+`~/.config/tip/config.yaml`
 
-```toml
-mode = "guided"
+```yaml
+mode: guided
 
-[shell]
-enabled = true
+shell:
+  enabled: true
 
-[adapters]
-path = ["~/.local/share/tip/adapters"]
-timeout = "500ms"
+adapters:
+  path:
+    - ~/.local/share/tip/adapters
+  timeout: 500ms
 
-[tools.docker]
-enabled = false
-
-[tools.git]
-mode = "guided"
+tools:
+  docker:
+    enabled: false
+  git:
+    mode: guided
 ```
 
 ## License
